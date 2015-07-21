@@ -73,7 +73,7 @@ function send_error(message) {
       to_send[action] = key;
     }
   }
-  //to_send["browser"] =  window.navigator.userAgent;
+  to_send["browser"] =  window.navigator.userAgent;
   to_send["message"] = message;
   self.port.emit("report", to_send);
 }
