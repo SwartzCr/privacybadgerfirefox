@@ -73,7 +73,7 @@ function send_error(message) {
       to_send[action] = key;
     }
   }
-  to_send["browser"] =  window.navigator.userAgent;
+  //to_send["browser"] =  window.navigator.userAgent;
   to_send["message"] = message;
   self.port.emit("report", to_send);
 }
@@ -127,6 +127,21 @@ function registerListeners(){
     reportClose(overlay);
   });
 }
+/**
+ * a function to find which domain is on the blocklist
+ * when getting the action for the eTLD+1
+ */
+function getTopLevel(action, origin, tabId){
+  if (action == "usercookieblock"){
+    return backgroundPage.getDomainFromFilter(matcherStore.combinedMatcherStore.userYellow.matchesAny(origin, "SUBDOCUMENT", getHostForTab(tabId), true).text);
+  }
+  if (action == "userblock"){
+    return backgroundPage.getDomainFromFilter(matcherStore.combinedMatcherStore.userRed.matchesAny(origin, "SUBDOCUMENT", getHostForTab(tabId), true).text);
+  }
+  if (action == "usernoaction"){
+    return backgroundPage.getDomainFromFilter(matcherStore.combinedMatcherStore.userGreen.matchesAny(origin, "SUBDOCUMENT", getHostForTab(tabId), true).text);
+  }
+}
 
 
 /**
@@ -167,6 +182,7 @@ function refreshPopup(settings) {
     '</div><div id="blockedOriginsInner">';
   var notracking = [];
   var count = 0;
+  var compressedOrigins = {};
   for (let i=0; i < sortedOrigins.length; i++) {
     var origin = sortedOrigins[i];
     var action = settings[origin];
@@ -174,10 +190,27 @@ function refreshPopup(settings) {
       notracking.push(origin);
       continue;
     }
+    else {
+      if (action.includes("user")){
+        var prevOrigin = origin;
+        origin = getTopLevel(action, origin, tabId);
+        if (prevOrigin != origin){
+          if (compressedOrigins.hasOwnProperty(origin)){
+            compressedOrigins[origin]['subs'].push(prevOrigin.replace(origin, ''))
+            continue;
+          }
+          compressedOrigins[origin] = {'action': action, 'subs':[prevOrigin.replace(origin, '')]};
+          continue;
+        }
+      }
+    }
     var flag = window.local_storage && local_storage.policyWhitelist[origin];
     count++;
     // todo: gross hack, use templating framework
     printable = _addOriginHTML(origin, printable, action, flag);
+  }
+  for (key in compressedOrigins){
+    printable = _addOriginHTML( key+" ("+compressedOrigins[key]['subs'].length+" subdomains)", printable, compressedOrigins[key]['action'])
   }
   $('#count').text(count);
   if(notracking.length > 0){
