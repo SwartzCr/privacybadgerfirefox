@@ -127,6 +127,25 @@ function registerListeners(){
     reportClose(overlay);
   });
 }
+/**
+ * a function to find which domain is on the blocklist
+ * when getting the action for the eTLD+1
+ */
+function getTopLevel(action, origin, tabId){
+    //TODO make this actually work
+  if (action == "usercookieblock"){
+    return storage.userYellow && storage.userYellow.hasOwnProperty(origin) ||
+                                 storage.userYellow.hasOwnProperty(utils.getBaseDomain(origin);
+  }
+  if (action == "userblock"){
+    return storage.userRed && storage.userRed.hasOwnProperty(origin) ||
+                                 storage.userRed.hasOwnProperty(utils.getBaseDomain(origin);
+  }
+  if (action == "usernoaction"){
+    return storage.userGreen && storage.userGreen.hasOwnProperty(origin) ||
+                                 storage.userGreen.hasOwnProperty(utils.getBaseDomain(origin);
+  }
+}
 
 
 /**
@@ -167,6 +186,7 @@ function refreshPopup(settings) {
     '</div><div id="blockedOriginsInner">';
   var notracking = [];
   var count = 0;
+  var compressedOrigins = {};
   for (let i=0; i < sortedOrigins.length; i++) {
     var origin = sortedOrigins[i];
     var action = settings[origin];
@@ -174,10 +194,28 @@ function refreshPopup(settings) {
       notracking.push(origin);
       continue;
     }
+    else {
+      if (action.includes("user")){
+        var prevOrigin = origin;
+        origin = getTopLevel(action, origin, tabId);
+        if (prevOrigin != origin){
+          if (compressedOrigins.hasOwnProperty(origin)){
+            compressedOrigins[origin]['subs'].push(prevOrigin.replace(origin, ''))
+            continue;
+          }
+          compressedOrigins[origin] = {'action': action, 'subs':[prevOrigin.replace(origin, '')]};
+          continue;
+        }
+      }
+    }
     var flag = window.local_storage && local_storage.policyWhitelist[origin];
     count++;
     // todo: gross hack, use templating framework
     printable = _addOriginHTML(origin, printable, action, flag);
+  }
+  for (key in compressedOrigins){
+    var flag2 = window.local_storage && local_storage.policyWhitelist[origin];
+    printable = _addOriginHTML( key, printable, compressedOrigins[key]['action'], flag2, compressedOrigins[key]['subs'].length)
   }
   $('#count').text(count);
   if(notracking.length > 0){
@@ -225,7 +263,7 @@ var feedTheBadgerTitle = feed_the_badger_title;
  * @param bool flag flag wether the domain respects DNT
  * @return String the html string to be printed
  */
-function _addOriginHTML(rawOrigin, printable, action, flag) {
+function _addOriginHTML(rawOrigin, printable, action, flag, multiTLD) {
   // Sanitize origin string, strip out any HTML tags.
   var origin = rawOrigin.replace(/</g, '').replace(/>/g, '');
   var classes = ["clicker", "tooltip"];
@@ -239,6 +277,10 @@ function _addOriginHTML(rawOrigin, printable, action, flag) {
   if (action == "block" || action == "cookieblock") {
     classes.push(action);
   }
+  var multiText = "";
+  if(multiTLD){
+    multiText = " ("+multiTLD+" subdomains)";
+  }
   var flagText = "";
   if(flag){
     flagText = "<div id='dnt-compliant'>" + 
@@ -247,7 +289,7 @@ function _addOriginHTML(rawOrigin, printable, action, flag) {
   }
   var classText = 'class="' + classes.join(" ") + '"';
   //TODO do something with the flag here to show off opt-out sites
-  return printable + '<div ' + classText + '" data-origin="' + origin + '" tooltip="' + _badgerStatusTitle(action, origin) + '"><div class="honeybadgerPowered tooltip" tooltip="'+ title + '"></div> <div class="origin">'+ flagText + _trimDomains(origin,25) + '</div>' + _addToggleHtml(origin, action) + '<img class="tooltipArrow" src="icons/badger-tb-arrow.png"><div class="tooltipContainer"></div></div>';
+  return printable + '<div ' + classText + '" data-origin="' + origin + '" tooltip="' + _badgerStatusTitle(action, origin) + '"><div class="honeybadgerPowered tooltip" tooltip="'+ title + '"></div> <div class="origin">'+ flagText + _trimDomains(origin + multiText,25) + '</div>' + _addToggleHtml(origin, action) + '<img class="tooltipArrow" src="icons/badger-tb-arrow.png"><div class="tooltipContainer"></div></div>';
 }
 function _trim(str, max) {
   if (str.length >= max) {
